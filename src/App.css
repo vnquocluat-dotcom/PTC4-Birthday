@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Calendar, Briefcase, Heart, Plus, Trash2, Gift, ChevronRight, Search, Copy, Check, Users, Upload, FileSpreadsheet, Download } from 'lucide-react';
+import { User, Calendar, Briefcase, Heart, Plus, Trash2, Gift, ChevronRight, Search, Copy, Check, Users, Upload, FileSpreadsheet, Download, Share2 } from 'lucide-react';
 
 /**
  * --- PHẦN 1: MÔ HÌNH HƯỚNG ĐỐI TƯỢNG (OOP MODEL) ---
@@ -182,7 +182,29 @@ const App = () => {
     new Member(2, 'Nguyễn Thị Minh', '1995-11-28', 'female', 'staff', 'single', 'Kho vận'),
   ];
 
-  const [members, setMembers] = useState(initialData);
+  // SỬA ĐỔI: Khởi tạo state từ LocalStorage để không mất dữ liệu khi F5
+  const [members, setMembers] = useState(() => {
+    const saved = localStorage.getItem('union_members_data');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        // Quan trọng: Dữ liệu từ LocalStorage là object thường, cần chuyển lại thành Class Member
+        return parsed.map(m => new Member(
+          m.id, m.name, m.dob, m.gender, m.position, m.maritalStatus, m.unit
+        ));
+      } catch (e) {
+        console.error("Lỗi khôi phục dữ liệu", e);
+        return initialData;
+      }
+    }
+    return initialData;
+  });
+
+  // SỬA ĐỔI: Tự động lưu vào LocalStorage mỗi khi danh sách members thay đổi
+  useEffect(() => {
+    localStorage.setItem('union_members_data', JSON.stringify(members));
+  }, [members]);
+
   const [activeTab, setActiveTab] = useState('home');
   const [selectedMember, setSelectedMember] = useState(null);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -267,19 +289,44 @@ const App = () => {
     const wishes = GreetingFactory.generateWishes(member);
     const [copiedIndex, setCopiedIndex] = useState(null);
 
-    const handleCopy = (text, index) => {
+    const handleCopy = (text) => {
         const textArea = document.createElement("textarea");
         textArea.value = text;
         document.body.appendChild(textArea);
         textArea.select();
         try {
             document.execCommand('copy');
-            setCopiedIndex(index);
-            setTimeout(() => setCopiedIndex(null), 2000);
         } catch (err) {
             console.error(err);
         }
         document.body.removeChild(textArea);
+    };
+
+    const handleCopyClick = (text, index) => {
+        handleCopy(text);
+        setCopiedIndex(index);
+        setTimeout(() => setCopiedIndex(null), 2000);
+    }
+
+    const handleShare = async (text) => {
+        // Ưu tiên dùng tính năng Share của điện thoại (Native Share)
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: `Chúc mừng sinh nhật ${member.name}`,
+                    text: text,
+                });
+            } catch (err) {
+                console.log('User cancelled share', err);
+            }
+        } else {
+            // Nếu dùng trên máy tính, copy và mở Zalo Web
+            handleCopy(text);
+            const isConfirmed = confirm("Đã sao chép lời chúc! Bạn có muốn mở Zalo Web để dán không?");
+            if (isConfirmed) {
+                window.open('https://chat.zalo.me/', '_blank');
+            }
+        }
     };
 
     return (
@@ -312,13 +359,21 @@ const App = () => {
                   <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2 py-1 rounded">
                     {wish.type}
                   </span>
-                  <button 
-                    onClick={() => handleCopy(wish.content, idx)}
-                    className={`flex items-center text-xs px-2 py-1 rounded transition-colors ${copiedIndex === idx ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-600'}`}
-                  >
-                    {copiedIndex === idx ? <Check size={14} className="mr-1"/> : <Copy size={14} className="mr-1"/>}
-                    {copiedIndex === idx ? 'Đã chép' : 'Sao chép'}
-                  </button>
+                  <div className="flex gap-2">
+                    <button 
+                        onClick={() => handleShare(wish.content)}
+                        className="flex items-center text-xs px-2 py-1 rounded transition-colors bg-blue-100 text-blue-700 hover:bg-blue-200 font-medium"
+                    >
+                        <Share2 size={14} className="mr-1"/> Gửi Zalo
+                    </button>
+                    <button 
+                        onClick={() => handleCopyClick(wish.content, idx)}
+                        className={`flex items-center text-xs px-2 py-1 rounded transition-colors ${copiedIndex === idx ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                    >
+                        {copiedIndex === idx ? <Check size={14} className="mr-1"/> : <Copy size={14} className="mr-1"/>}
+                        {copiedIndex === idx ? 'Đã chép' : 'Copy'}
+                    </button>
+                  </div>
                 </div>
                 <p className="text-gray-700 text-sm leading-relaxed selection:bg-blue-100">{wish.content}</p>
               </div>
@@ -549,7 +604,7 @@ const App = () => {
           {filteredMembers.length === 0 && (
              <div className="text-center py-10 opacity-50">
                 <Users size={40} className="mx-auto mb-2"/>
-                <p>Không tìm thấy kết quả</p>
+                <p>Không tìm thấy kết quả nào phù hợp.</p>
              </div>
           )}
         </div>
